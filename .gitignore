@@ -53,6 +53,10 @@ static/uploads/
 .DS_Store
 Thumbs.db
 
+# Windows batch files
+*.bat
+*.cmd
+
 # Coverage / testing
 .coverage
 htmlcov/
