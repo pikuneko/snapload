@@ -565,8 +565,30 @@ def _get_task_status(task_id):
         if task.status == "completed":
             result["complete"] = True
             result["status"] = "complete"
-            # ダウンロード対象が検出されていればそれを使用、なければベースディレクトリ
-            result["result_path"] = task.download_path if task.download_path else task.save_dir
+            # ダウンロード対象が検出されていればそれを使用
+            if task.download_path:
+                # task.download_path は save_dir を基準とした相対パスである想定
+                result["result_path"] = task.download_path
+            else:
+                # フォールバック: save_dir の中で最新のファイル／フォルダを返す
+                try:
+                    base = os.path.abspath(task.save_dir)
+                    items = [os.path.join(base, p) for p in os.listdir(base)]
+                    items = [p for p in items if os.path.exists(p)]
+                    if items:
+                        latest = max(items, key=lambda p: os.path.getmtime(p))
+                        # 結果は UPLOAD_FOLDER 相対のパスで返すため、相対化を試みる
+                        try:
+                            uploads_base = os.path.abspath(os.path.join(APP_DIR, load_settings().get('upload_folder', 'downloads')))
+                            rel = os.path.relpath(latest, uploads_base)
+                        except Exception:
+                            rel = os.path.basename(latest)
+                        result["result_path"] = rel.replace('\\', '/')
+                    else:
+                        # 最終手段としてフォルダ名を返す（クライアント側で処理される）
+                        result["result_path"] = os.path.basename(base)
+                except Exception:
+                    result["result_path"] = os.path.basename(task.save_dir)
         return result
     return None
 
