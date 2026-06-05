@@ -248,6 +248,13 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
 
+            const passcodeInput = document.getElementById('passcode');
+            let passcodeValue = passcodeInput.value;
+            // もし入力が空でプレースホルダが「設定済み」を示す場合は、変更なしを示す特殊値を送る
+            if (!passcodeValue && passcodeInput.placeholder && passcodeInput.placeholder.includes('設定済み')) {
+                passcodeValue = '__SET__';
+            }
+
             const settings = {
                 default_quality: document.getElementById('default-quality').value,
                 concurrent_fragments: document.getElementById('concurrent-fragments').value,
@@ -257,7 +264,7 @@
                 history_count: parseInt(document.getElementById('history-count').value),
                 show_history: document.getElementById('show-history').checked,
                 show_logs: document.getElementById('show-logs').checked,
-                passcode: document.getElementById('passcode').value
+                passcode: passcodeValue
             };
 
             // サーバーにも保存
