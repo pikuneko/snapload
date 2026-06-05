@@ -116,24 +116,31 @@ def check_auth():
     if request.path.startswith('/static'):
         return
 
-    # 保護対象のルートを定義 (状態を変更するアクションや管理画面)
-    protected_endpoints = ['settings_page', 'api_settings', 'admin_dashboard', 'delete_history', 'reset_settings']
+    # 常にログインを必須にする（初回アクセス時にパスワードを要求するため）
+    # ただしログイン画面そのものは除外
+    allowed_paths = [
+        url_for('login'),
+        url_for('terms_of_service')
+    ]
 
-    if request.endpoint in protected_endpoints:
-        current_settings = load_settings()
-        passcode = current_settings.get("passcode")
+    # 開発用のフロントドア（favicon 等）があれば許可
+    if request.path in allowed_paths:
+        return
 
-        # パスコードが設定されている場合のみ認証が必要
-        if passcode and len(str(passcode).strip()) > 0:
-            if not session.get('authenticated'):
-                # AJAXリクエスト (fetch等) の場合はJSONを返す
-                if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return jsonify({
-                        "success": False,
-                        "error": "認証が必要です",
-                        "redirect": url_for('login', next=url_for('index'))
-                    }), 401
-                return redirect(url_for('login', next=request.url))
+    current_settings = load_settings()
+    passcode = current_settings.get("passcode")
+
+    # パスコードが設定されている、または常に保護したい場合は認証を要求
+    if passcode and len(str(passcode).strip()) > 0:
+        if not session.get('authenticated'):
+            # AJAXリクエスト (fetch等) の場合はJSONを返す
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    "success": False,
+                    "error": "認証が必要です",
+                    "redirect": url_for('login', next=url_for('index'))
+                }), 401
+            return redirect(url_for('login', next=request.url))
 
 # ログイン試行レート制限（IP アドレス -> [時刻,...] のリスト）
 login_attempts = defaultdict(list)
@@ -356,67 +363,6 @@ def updates():
 @app.route('/admin')
 def admin_dashboard():
     return render_template("admin_dashboard.html", status_info=get_status_info(), active_tasks=active_tasks, recent_downloads=get_safe_history()[:5])
-
-@app.route('/settings')
-def settings_page():
-    return render_template("settings.html", settings=load_settings())
-
-@app.route('/api/settings', methods=['GET', 'POST'])
-def api_settings():
-    settings_file = os.path.join(BASE_DIR, "JSON/settings.json")
-
-    if request.method == 'GET':
-        s = load_settings()
-        # パスコードそのものは返さず、設定済みかどうかだけを返す
-        if s.get("passcode"):
-            s["passcode"] = "__SET__"
-        return jsonify(s)
-
-    # POST: 設定を保存
-    try:
-        data = request.get_json(force=True)
-        if not data:
-            return jsonify({"success": False, "error": "Invalid request"}), 400
-
-        os.makedirs(os.path.dirname(settings_file), exist_ok=True)
-
-        # 既存の設定を読み込み
-        current = load_settings()
-
-        # パスコードのハッシュ化処理
-        new_passcode = data.get("passcode")
-        if new_passcode == "__SET__":
-            # 変更なし、既存のハッシュを維持
-            data["passcode"] = current.get("passcode")
-        elif new_passcode:
-            # パスコード長チェック
-            if len(str(new_passcode)) < 4:
-                return jsonify({"success": False, "error": "パスコードは4文字以上でお願いします"}), 400
-            # 新しいパスコードをハッシュ化
-            data["passcode"] = generate_password_hash(new_passcode)
-        else:
-            # 空欄の場合はパスコード無効化
-            data["passcode"] = ""
-
-        # 新しい設定で更新
-        current.update(data)
-        save_settings_to_file(current)
-
-        return jsonify({"success": True, "message": "設定を保存しました"})
-    except ValueError:
-        return jsonify({"success": False, "error": "Invalid request format"}), 400
-    except Exception as e:
-        logging.error(f"Failed to save user settings: {e}")
-        return jsonify({"success": False, "error": "設定の保存に失敗しました"}), 500
-
-@app.route('/api/settings/reset', methods=['POST'])
-def reset_settings():
-    try:
-        save_settings_to_file(DEFAULT_SETTINGS.copy())
-        return jsonify({"success": True, "message": "初期設定にリセットしました"})
-    except Exception as e:
-        logging.error(f"Failed to reset settings: {e}")
-        return jsonify({"success": False, "error": str(e)})
 
 @app.route("/terms_of_service")
 def terms_of_service():
