@@ -1,0 +1,66 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+venv*/
+.Python
+
+# Flask instance folder
+instance/
+
+# Environment variables
+.env
+.env.*
+
+# Databases
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+
+# Downloads / uploads (local)
+downloads/
+static/uploads/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage / testing
+.coverage
+htmlcov/
+
+# Other
+*.bak
+*.tmp
+
+# Node
+node_modules/
+npm-debug.log

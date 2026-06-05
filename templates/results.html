@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='saitoico.png') }}">
+    <link rel="apple-touch-icon-precomposed"
+        href="{{ url_for('static', filename='apple-touch-icon-precomposed.png') }}">
+    <title>ダウンロード結果</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+</head>
+
+<body>
+    <div class="container main-container">
+        <h1 class="result-title" data-aos="fade-down">
+            <a href="{{ url_for('index') }}" class="logo-link">
+                <img src="{{ url_for('static', filename='saitoico.png') }}" alt="SnapLoad Icon" />SnapLoad
+            </a>
+        </h1>
+
+        <div class="glass-card result-card" data-aos="zoom-in" data-aos-delay="100">
+            {% if error %}
+            <div class="error"><i class="fas fa-exclamation-triangle"></i> {{ error }}</div>
+            {% else %}
+            {% if is_playlist %}
+            <div class="success"><i class="fas fa-check-circle"></i> プレイリストのダウンロードが完了しました！</div>
+            <div class="file-summary">
+                <span class="badge"><i class="fas fa-layer-group"></i> {{ files|length }} 個のファイル</span>
+            </div>
+
+            <div class="file-list-container">
+                <h3><i class="fas fa-list-ul"></i> ダウンロードファイル一覧</h3>
+                <div class="file-items">
+                    {% for file in files %}
+                    <div class="file-item-mini" data-aos="fade-left" data-aos-delay="{{ 200 + loop.index0 * 50 }}">
+                        <div class="file-info-mini">
+                            <i class="fas fa-file-alt"></i>
+                            <span class="file-name-text">{{ file }}</span>
+                        </div>
+                        <a href="{{ url_for('download_file', dirname=name, filename=file) }}" class="btn-mini"
+                            title="個別にダウンロード">
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card-actions">
+                <a href="{{ url_for('download', name=name) }}" class="btn download-btn">
+                    <i class="fas fa-file-archive"></i> 全てをZIPでダウンロード
+                </a>
+            </div>
+
+            {% else %}
+            <div class="success"><i class="fas fa-check-circle"></i> ダウンロードが完了しました！</div>
+
+            <div class="file-details">
+                <div class="detail-item">
+                    <span class="label">ファイル名</span>
+                    <span class="value">{{ name }}</span>
+                </div>
+                {% if file_size %}
+                <div class="detail-item">
+                    <span class="label">サイズ</span>
+                    <span class="value">{{ file_size }} MB</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="card-actions">
+                <a href="{{ url_for('download', name=name) }}" class="btn download-btn large-btn">
+                    <i class="fas fa-download"></i> 今すぐダウンロード
+                </a>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+
+        <div class="footer-actions">
+            <a href="{{ url_for('index') }}" class="back-link"><i class="fas fa-arrow-left"></i> トップページに戻る</a>
+        </div>
+    </div>
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+
+</html>

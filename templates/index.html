@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>SnapLoad</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="apple-touch-icon-precomposed"
+    href="{{ url_for('static', filename='apple-touch-icon-precomposed.png') }}" />
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='saitoico.png') }}" />
+  <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+  <script src="https://unpkg.com/ityped@1.0.3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body>
+  <div class="container staggered-container">
+    <header class="header-flex" data-aos="fade-down">
+      <div class="header-spacer"></div>
+      <div class="header-center">
+        <h1 class="header-title">
+          <a href="{{ url_for('index') }}" class="logo-link">
+            <img src="{{ url_for('static', filename='saitoico.png') }}" alt="SnapLoad Icon" />SnapLoad
+          </a>
+        </h1>
+        <div class="header-subtitle" data-aos="fade-up" data-aos-delay="50">
+          <span id="ityped-subtitle"></span>
+        </div>
+      </div>
+      <div class="header-actions">
+        {% if session.get('authenticated') %}
+        <a href="{{ url_for('logout') }}" class="header-link logout-link" title="ログアウト">
+          <i class="fas fa-sign-out-alt"></i>
+        </a>
+        {% endif %}
+        <a href="{{ url_for('updates') }}" class="header-link updates-link" title="アップデート履歴">
+          <i class="fas fa-rocket"></i>
+        </a>
+        <a href="{{ url_for('settings_page') }}" class="header-link settings-link" title="設定">
+          <i class="fas fa-cog"></i>
+        </a>
+      </div>
+    </header>
+
+    <div class="error" id="error-message"></div>
+    <div class="success" id="success-message"></div>
+
+    <form method="POST" id="download-form" data-aos="fade-up" data-aos-delay="100">
+      <div class="form-group">
+        <label for="url">YouTube動画/プレイリストURL:</label>
+        <div class="input-wrapper">
+          <i class="fas fa-link input-icon"></i>
+          <input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required autofocus />
+          <div class="input-actions">
+            <button type="button" id="clear-url" title="入力をクリア"><i class="fas fa-times"></i></button>
+            <button type="button" id="paste-url" title="クリップボードから貼り付け"><i class="fas fa-paste"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="checkbox-container">
+          <div class="checkbox">
+            <input type="checkbox" id="audio_only" name="audio_only" />
+            <label for="audio_only">音声のみダウンロード</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="button-container">
+        <button type="submit" id="submit-btn" class="download-btn">
+          <i class="fas fa-download"></i>ダウンロード
+        </button>
+        <button type="button" id="youtube-btn" class="youtube-btn" onclick="openYouTube()">
+          <i class="fab fa-youtube"></i>YouTubeで開く
+        </button>
+      </div>
+    </form>
+
+    <!-- 最近のダウンロード履歴 -->
+    {% if history and history|length > 0 %}
+    <div class="recent-history" data-aos="fade-up" data-aos-delay="200">
+      <h3>
+        最近のダウンロード
+        <a href="{{ url_for('history') }}">すべて表示 <i class="fas fa-arrow-right"></i></a>
+      </h3>
+      <ul class="history-list">
+        {% for item in history %}
+        <li class="history-item" data-aos="fade-left" data-aos-delay="{{ 250 + loop.index0 * 50 }}">
+          <div class="history-info">
+            <div class="history-title">
+              <span class="file-type type-{{ item.file_type }}">{{ item.file_type|upper }}</span>
+              {{ item.title|truncate(40) }}
+            </div>
+            <div class="history-meta">
+              {% if item.is_playlist %}
+              <i class="fas fa-list"></i> プレイリスト {% endif %}
+              <i class="fas fa-calendar"></i> {{ item.download_date }}
+            </div>
+          </div>
+          <div class="history-actions">
+            <button onclick="copyToClipboard('{{ item.url }}')" class="history-btn copy-btn" title="URLをコピー">
+              <i class="fas fa-copy"></i>
+            </button>
+            <a href="{{ url_for('download', name=item.file_path) }}" class="history-btn download-btn">ダウンロード</a>
+            <a href="{{ item.url }}" target="_blank" class="history-btn youtube-btn">
+              <i class="fab fa-youtube"></i>再生
+            </a>
+            <button onclick="deleteHistory('{{ item.file_path }}', this)" class="history-btn delete-btn" title="履歴から削除">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="instructions" data-aos="fade-up" data-aos-delay="300">
+      <h3 style="cursor: pointer;" onclick="toggleInstructions()">
+        使い方 <i class="fas fa-chevron-down" id="instr-icon" style="font-size: 1rem; transition: 0.3s;"></i>
+      </h3>
+      <div id="instr-content">
+        <ol>
+          <li>
+            YouTubeの動画URLまたはプレイリストURLを入力欄に貼り付けてください
+          </li>
+          <li>
+            音声のみが必要な場合は「音声のみダウンロード」にチェックを入れてください
+          </li>
+          <li>「ダウンロード」ボタンをクリックすると処理が開始されます</li>
+          <li>
+            プレイリストの場合は、すべての動画が自動的にダウンロードされます
+          </li>
+          <li>「YouTubeで開く」ボタンでYouTubeサイトを新しいタブで開けます</li>
+          <li>
+            <a href="{{ url_for('terms_of_service') }}" target="_blank" class="text-muted">利用規約をご確認ください</a>
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="troubleshooting" data-aos="fade-up" data-aos-delay="400">
+      <h3 style="cursor: pointer;" onclick="toggleTroubleshooting()">
+        トラブルシューティング <i class="fas fa-chevron-down" id="trouble-icon" style="font-size: 1rem; transition: 0.3s;"></i>
+      </h3>
+      <div id="trouble-content">
+        <p>ダウンロードで問題が発生した場合:</p>
+        <ul>
+          <li>動画が公開設定であることを確認してください</li>
+          <li>地域制限のない動画をお試しください</li>
+          <li>しばらく時間をおいてから再度お試しください</li>
+          <li>別の動画URLでお試しください</li>
+          <li>
+            プレイリストが大きい場合は、ダウンロードに時間がかかることがあります
+          </li>
+          <li>
+            このサイトはyt-dlpというPythonのライブラリを使用しています。<a href="https://github.com/yt-dlp/yt-dlp">GitHubリポジトリ</a>をご覧ください。
+          </li>
+          <li>
+            yt-dlpは頻繁に更新を繰り返すため、一時的に使用できなくなる可能性があります。
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <footer>
+      <p>© 2025 SnapLoad - 個人利用に限りご利用いただけます</p>
+      <p><a href="{{ url_for('updates') }}" class="text-muted" style="text-decoration: underline;">アップデート履歴を確認する</a></p>
+    </footer>
+
+    <script>
+      // YouTubeで開く機能
+      function openYouTube() {
+        const url = document.getElementById("url").value;
+        if (url) {
+          window.open(url, "_blank");
+        } else {
+          alert("URLを入力してください");
+        }
+      }
+
+      // ダウンロード開始処理
+      document
+        .getElementById("download-form")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+
+          const url = document.getElementById("url").value;
+          const audioOnly = document.getElementById("audio_only").checked;
+
+          if (!url) {
+            showMessage("error", "URLを入力してください");
+            return;
+          }
+
+          // ボタンを無効化
+          const submitBtn = document.getElementById("submit-btn");
+          submitBtn.disabled = true;
+          submitBtn.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i>処理中...';
+
+          // ダウンロードを開始
+          fetch("/", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url: url,
+              audio_only: audioOnly,
+            }),
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              if (data.success) {
+                showMessage(
+                  "success",
+                  "ダウンロードを開始しました。進捗状況ページに移動します..."
+                );
+
+                // 同じウィンドウで進捗状況ページに移動
+                setTimeout(() => {
+                  window.location.href = data.status_url;
+                }, 1500);
+              } else {
+                showMessage(
+                  "error",
+                  data.error || "ダウンロードの開始に失敗しました"
+                );
+              }
+            })
+            .catch((error) => {
+              console.error("Error:", error);
+              showMessage("error", "通信エラーが発生しました");
+            })
+            .finally(() => {
+              // ボタンを再有効化
+              submitBtn.disabled = false;
+              submitBtn.innerHTML =
+                '<i class="fas fa-download"></i>ダウンロード';
+            });
+        });
+
+      function showMessage(type, message) {
+        const errorElement = document.getElementById("error-message");
+        const successElement = document.getElementById("success-message");
+
+        if (type === "error") {
+          errorElement.textContent = message;
+          errorElement.style.display = "block";
+          successElement.style.display = "none";
+        } else {
+          successElement.textContent = message;
+          successElement.style.display = "block";
+          errorElement.style.display = "none";
+        }
+
+        // 5秒後にメッセージを自動的に非表示
+        setTimeout(() => {
+          errorElement.style.display = "none";
+          successElement.style.display = "none";
+        }, 5000);
+      }
+      async function deleteHistory(filePath, btn) {
+        const result = await Swal.fire({
+          title: '履歴を削除しますか？',
+          text: "この操作は元に戻せません。",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#eb3349',
+          cancelButtonColor: '#64748b',
+          confirmButtonText: '削除する',
+          cancelButtonText: 'キャンセル'
+        });
+
+        if (result.isConfirmed) {
+          try {
+            const response = await fetch('/api/history/delete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ file_path: filePath })
+            });
+
+            const data = await response.json();
+            if (data.redirect) {
+              window.location.href = data.redirect;
+              return;
+            }
+            if (data.success) {
+              const item = btn.closest('.history-item');
+              item.classList.add('fade-out');
+              setTimeout(() => item.remove(), 400);
+            } else {
+              Swal.fire('エラー', data.error || '削除に失敗しました', 'error');
+            }
+          } catch (err) {
+            Swal.fire('エラー', '通信に失敗しました', 'error');
+          }
+        }
+      }
+      /**
+       * トラブルシューティングセクションの表示・非表示を切り替え
+       */
+      function toggleTroubleshooting() {
+        const content = document.getElementById('trouble-content');
+        const icon = document.getElementById('trouble-icon');
+
+        if (content.style.display === 'none') {
+          content.style.display = 'block';
+          icon.style.transform = 'rotate(0deg)';
+        } else {
+          content.style.display = 'none';
+          icon.style.transform = 'rotate(-180deg)';
+        }
+      }
+    </script>
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+
+</html>

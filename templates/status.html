@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='saitoico.png') }}">
+    <link rel="apple-touch-icon-precomposed"
+        href="{{ url_for('static', filename='apple-touch-icon-precomposed.png') }}">
+    <title>ダウンロード状況 - SnapLoad</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+</head>
+
+<body>
+    <div class="container">
+        <h1 data-aos="fade-down">
+            <a href="{{ url_for('index') }}" class="logo-link">
+                <img src="{{ url_for('static', filename='saitoico.png') }}" alt="SnapLoad Icon" />SnapLoad
+            </a>
+        </h1>
+
+        <!-- タスク準備中表示（最初だけ出る） -->
+        <div class="waiting" id="waiting-screen" data-aos="zoom-in">
+            <i class="fas fa-spinner"></i>
+            <h2>ダウンロード準備中...</h2>
+            <p>タスクを起動しています。数秒お待ちください！</p>
+        </div>
+
+        <!-- 通常の進捗画面（準備できたらこっちに切り替え） -->
+        <div class="progress-container" id="progress-container" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="status-message" id="status-message">処理を開始しています...</div>
+            <div id="progress-percentage">0%</div>
+        </div>
+
+        <!-- ミニゲームセクション (独立) -->
+        <div id="mini-game-section" style="text-align: center; margin: 30px 0;" data-aos="zoom-in" data-aos-delay="200">
+            <div id="game-wrapper" style="position: relative; display: inline-block;">
+                <canvas id="gameCanvas" width="320" height="240"
+                    style="border: 3px solid var(--accent-purple); border-radius: var(--radius-md); background: #000; cursor: pointer; box-shadow: var(--shadow-glow);"></canvas>
+                <div id="game-overlay"
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.6); border-radius: var(--radius-md); color: white; pointer-events: none;">
+                    <p style="margin-bottom: 10px; font-weight: bold; font-size: 1.2rem;">SnapBird 🚀</p>
+                    <p style="font-size: 0.9rem;">「Space」キー または「クリック」でジャンプ！</p>
+                    <p style="font-size: 0.8rem; margin-top: 5px; opacity: 0.8;">(画面クリックでスタート)</p>
+                </div>
+            </div>
+            <p style="font-size: 0.8rem; margin-top: 10px; color: var(--text-muted); font-weight: 500;">
+                <i class="fas fa-gamepad"></i> 待ち時間にハイスコアを目指せ！
+            </p>
+        </div>
+
+        <!-- ログ表示セクション -->
+        <div class="log-container" id="log-container" style="display: none;" data-aos="fade-up">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin-bottom: 0;"><i class="fas fa-terminal"></i> ダウンロードログ</h3>
+                <button onclick="copyLog()" class="history-btn" style="padding: 5px 12px; font-size: 0.8rem;">
+                    <i class="fas fa-copy"></i> ログをコピー
+                </button>
+            </div>
+            <pre id="log-display" class="log-box"></pre>
+        </div>
+
+        <a href="{{ url_for('index') }}" class="back-link">← トップページに戻る</a>
+    </div>
+
+
+
+    <script>
+        const taskId = "{{ task_id }}";
+        let retryCount = 0;
+        const maxRetries = 20; // 20秒くらいは待つ
+
+        // 通知許可をリクエスト
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        // 完了通知を送信
+        function sendNotification(title, message) {
+            // ブラウザ通知
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification(title, {
+                    body: message,
+                    icon: '/static/saitoico.png',
+                    tag: 'download-complete',
+                    requireInteraction: true
+                });
+
+                notification.onclick = function () {
+                    window.focus();
+                    notification.close();
+                };
+
+                // 10秒後に自動で閉じる
+                setTimeout(() => notification.close(), 10000);
+            }
+
+            // 音を鳴らす
+            playNotificationSound();
+        }
+
+        // 通知音
+        function playNotificationSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.3;
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.2);
+
+            setTimeout(() => {
+                const osc2 = audioContext.createOscillator();
+                osc2.connect(gainNode);
+                osc2.frequency.value = 1000;
+                osc2.type = 'sine';
+                osc2.start();
+                osc2.stop(audioContext.currentTime + 0.3);
+            }, 200);
+        }
+
+        function copyLog() {
+            const logDisplay = document.getElementById('log-display');
+            if (!logDisplay) return;
+
+            const text = logDisplay.innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('button[onclick="copyLog()"]');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> コピー完了';
+
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Copy failed:', err);
+            });
+        }
+
+        function updateProgress() {
+            fetch(`/task_progress/${taskId}`, { cache: "no-store" })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // ここに来たらタスクがちゃんと見つかった！
+                    document.getElementById('waiting-screen').style.display = 'none';
+                    document.getElementById('progress-container').style.display = 'block';
+
+                    const progressFill = document.getElementById('progress-fill');
+                    const progressPercentage = document.getElementById('progress-percentage');
+                    const statusMessage = document.getElementById('status-message');
+
+                    progressFill.style.width = data.percentage + '%';
+                    progressPercentage.textContent = data.percentage.toFixed(1) + '%';
+                    statusMessage.textContent = data.message || '処理中...';
+
+                    // ログ表示を更新
+                    if (data.logs && data.logs.length > 0) {
+                        const logContainer = document.getElementById('log-container');
+                        const logBox = document.getElementById('log-display');
+                        logContainer.style.display = 'block';
+
+                        // ログ内容を更新
+                        logBox.innerHTML = data.logs.map(log => {
+                            let className = 'log-line';
+                            if (log.includes('%')) className += ' progress';
+                            if (log.toLowerCase().includes('error')) className += ' error';
+                            return `<div class="${className}">${escapeHtml(log)}</div>`;
+                        }).join('');
+
+                        // 自動スクロール
+                        logBox.scrollTop = logBox.scrollHeight;
+                    }
+
+                    if (data.status === 'complete' && data.result_path) {
+                        // 完了通知を送信
+                        sendNotification('✅ ダウンロード完了！', 'ファイルのダウンロードが完了しました。');
+
+                        const isPlaylist = data.is_playlist ? 'true' : 'false';
+                        const resultUrl = `/results/${encodeURIComponent(data.result_path)}?is_playlist=${isPlaylist}`;
+
+                        setTimeout(() => {
+                            window.location.href = resultUrl;
+                        }, 1500);
+                        return;
+                    }
+
+                    if (data.status === 'error') {
+                        statusMessage.className = 'status-message error';
+                        sendNotification('❌ ダウンロード失敗', data.message || 'エラーが発生しました。');
+                    }
+
+                    // 次も更新
+                    setTimeout(updateProgress, 1200);
+                })
+                .catch(err => {
+                    console.log(`まだ準備中... (${retryCount}/${maxRetries})`, err.message);
+
+                    if (retryCount >= maxRetries) {
+                        document.getElementById('waiting-screen').innerHTML = `
+                            <h2>タイムアウト</h2>
+                            <p>タスクの起動に失敗しました...<br>
+                            <a href="/">トップに戻る</a></p>
+                        `;
+                        return;
+                    }
+
+                    retryCount++;
+                    setTimeout(updateProgress, 1000); // 準備中は1秒ごとにリトライ
+                });
+        }
+
+        // HTMLエスケープ関数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ==========================================
+        // SnapBird Mini-Game Logic
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('game-overlay');
+
+        let bird = { x: 50, y: 120, w: 20, h: 20, v: 0, g: 0.22, jump: -4.2 };
+        let pipes = [];
+        let score = 0;
+        let gameActive = false;
+        let frame = 0;
+
+        function drawBird() {
+            ctx.fillStyle = '#A855F7'; // accent-purple
+            ctx.beginPath();
+            ctx.roundRect(bird.x, bird.y, bird.w, bird.h, 4);
+            ctx.fill();
+            // Logo eye
+            ctx.fillStyle = 'white';
+            ctx.fillRect(bird.x + 12, bird.y + 4, 4, 4);
+        }
+
+        function drawPipes() {
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.4)';
+            pipes.forEach(p => {
+                ctx.fillRect(p.x, 0, p.w, p.top);
+                ctx.fillRect(p.x, p.bottom, p.w, canvas.height - p.bottom);
+            });
+        }
+
+        function updateGame() {
+            if (!gameActive) return;
+
+            bird.v += bird.g;
+            bird.y += bird.v;
+
+            if (bird.y + bird.h > canvas.height || bird.y < 0) endGame();
+
+            if (frame % 80 === 0) {
+                let gap = 90;
+                let top = Math.random() * (canvas.height - gap - 40) + 20;
+                pipes.push({ x: canvas.width, w: 40, top: top, bottom: top + gap });
+            }
+
+            pipes.forEach(p => {
+                p.x -= 2;
+                if (p.x + p.w < 0) {
+                    pipes.shift();
+                    score++;
+                }
+
+                if (bird.x + bird.w > p.x && bird.x < p.x + p.w &&
+                    (bird.y < p.top || bird.y + bird.h > p.bottom)) {
+                    endGame();
+                }
+            });
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPipes();
+            drawBird();
+
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Outfit, sans-serif';
+            ctx.fillText(`Score: ${score}`, 10, 30);
+
+            frame++;
+            requestAnimationFrame(updateGame);
+        }
+
+        function startGame() {
+            bird.y = 120; bird.v = 0; pipes = []; score = 0; frame = 0;
+            gameActive = true;
+            overlay.style.display = 'none';
+            updateGame();
+        }
+
+        function endGame() {
+            gameActive = false;
+            overlay.style.display = 'flex';
+            overlay.innerHTML = `<p style="font-weight: bold; font-size: 1.2rem;">GAME OVER 💥</p><p>Score: ${score}</p><p style="font-size: 0.8rem; margin-top: 10px;">リトライするにはクリック</p>`;
+        }
+
+        canvas.addEventListener('mousedown', () => {
+            if (!gameActive) startGame();
+            else bird.v = bird.jump;
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!gameActive) startGame();
+                else bird.v = bird.jump;
+            }
+        });
+
+        // ハイスコア初期表示
+        const storedHS = localStorage.getItem('snapbird_highscore');
+        if (storedHS) {
+            document.getElementById('init-highscore').innerHTML = `<i class="fas fa-crown"></i> High Score: ${storedHS}`;
+        }
+
+        // 即スタート
+        updateProgress();
+    </script>
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+
+</html>
